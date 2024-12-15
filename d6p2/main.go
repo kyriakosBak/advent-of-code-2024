@@ -8,8 +8,8 @@ import (
 )
 
 func main() {
-	// filepath := "input.txt"
-	filepath := "test_input.txt"
+	filepath := "input.txt"
+	// filepath := "test_input.txt"
 	file, err := os.Open(filepath)
 	if err != nil {
 		log.Fatal(err)
@@ -23,9 +23,6 @@ func main() {
 		Map = append(Map, []rune(line))
 	}
 
-	guard := Guard{}
-	guard.orientation = 0
-	guard.distinctPosition = make(map[MapPoint]bool)
 	startingPoint := MapPoint{0, 0, 0}
 
 	// Find guard starting pos
@@ -33,10 +30,7 @@ out:
 	for i, row := range Map {
 		for j, r := range row {
 			if r == rune('^') {
-				guard.curPosX = i
-				guard.curPosY = j
 				startingPoint = MapPoint{i, j, 0}
-				guard.distinctPosition[startingPoint] = true
 				break out
 			}
 		}
@@ -45,36 +39,38 @@ out:
 	// Start moving guard by placing obstacles one at a time
 	xLimit := len(Map)
 	yLimit := len(Map[0])
+	totalObstacles := 0
 	for x := 0; x < len(Map); x++ {
 		for y := 0; y < len(Map[x]); y++ {
 			// At this level we have the coordinates for our newly placed obstacle
+			if x == startingPoint.x && y == startingPoint.y {
+				continue
+			}
+			if Map[x][y] == rune('#') {
+				continue
+			}
+			guard := NewGuard(startingPoint.x, startingPoint.y)
+			distPositions := make(map[MapPoint]bool)
 			for {
 				// Guard has exited the grid
 				if !isPosInLimits(guard.curPosX, guard.curPosY, xLimit, yLimit) {
 					break
 				}
 				i, j := guard.NextMove()
-				if isPosInLimits(i, j, xLimit, yLimit) && Map[i][j] == rune('#') {
-					fmt.Println("obstacle", i, j)
-					guard.Rotate()
+				if _, ok := distPositions[guard.CurrentMapPoint()]; ok {
+					totalObstacles++
+					break
 				}
+				distPositions[guard.CurrentMapPoint()] = true
+				if isPosInLimits(i, j, xLimit, yLimit) && (Map[i][j] == rune('#') || (i == x && j == y)) {
+					guard.Rotate()
+					continue
+				}
+				guard.Move()
 			}
 		}
 	}
-
-	for {
-		// Guard has exited our map so we return the result
-		if !isPosInLimits(guard.curPosX, guard.curPosY, xLimit, yLimit) {
-			// We deduct one cause we don't want the last position which is out of the grid
-			continue
-		}
-		i, j := guard.NextMove()
-		if isPosInLimits(i, j, xLimit, yLimit) && Map[i][j] == rune('#') {
-			fmt.Println("obstacle", i, j)
-			guard.Rotate()
-		}
-		guard.Move()
-	}
+	fmt.Println(totalObstacles)
 }
 
 func isPosInLimits(xPos int, yPos int, xLimit int, yLimit int) bool {
@@ -91,25 +87,26 @@ type MapPoint struct {
 }
 
 type Guard struct {
-	curPosX   int
-	curPosY   int
-	totalStep int
+	curPosX int
+	curPosY int
 
 	// 0 - up, 1 - right, 2 - down, 3 - left
-	orientation      int
-	xLimit           int
-	yLimit           int
-	distinctPosition map[MapPoint]bool
+	orientation int
 }
 
-func (g *Guard) GetCopy() Guard {
-	newGuard := g
-	newGuard.distinctPosition = make(map[MapPoint]bool)
-	return *newGuard
+func NewGuard(startX int, startY int) Guard {
+	g := Guard{}
+	g.curPosX = startX
+	g.curPosY = startY
+	return g
+}
+
+func (g *Guard) CurrentMapPoint() MapPoint {
+	return MapPoint{g.curPosX, g.curPosY, g.orientation}
 }
 
 // Returns false if move has been done before
-func (g *Guard) Move() bool {
+func (g *Guard) Move() {
 	switch g.orientation {
 	case 0:
 		g.curPosX--
@@ -120,13 +117,6 @@ func (g *Guard) Move() bool {
 	case 3:
 		g.curPosY--
 	}
-	g.totalStep++
-	if g.distinctPosition[MapPoint{g.curPosX, g.curPosY, g.orientation}] == true {
-		fmt.Println("detected loop")
-		return false
-	}
-	g.distinctPosition[MapPoint{g.curPosX, g.curPosY, g.orientation}] = true
-	return true
 }
 
 func (g *Guard) NextMove() (int, int) {
